@@ -10,6 +10,18 @@ ser = serial.Serial(serial_port_name, 9600, timeout=1)
 
 import time
 
+#############
+import requests
+import json
+import random
+#import time
+import datetime
+
+base = 'http://127.0.0.1:5000'
+network_id = 'local'
+header = {}
+#############
+
 delay = 1*10 # Delay in seconds
 
 # Run once at the start
@@ -23,15 +35,64 @@ def setup():
 def loop():
     # Check if something is in serial buffer \
     if ser.inWaiting() > 0:
-        if ser.readline() == 1 | ser.readline() == 2:
-            i = ser.readline()
-            break
+        i = ser.readline()
+        if int(i) == 1 or int(i) == 2:
+            print "Received tag:", i
+            print "Type tag:", type(i)
         try:
             # Read entire line 
             # (until '\n')
             x = ser.readline()
-            print "Received:", x 
-            print "Type:", type(x)
+            print "Received data:", x 
+            print "Type data:", type(x)
+            
+            ###################################################################################################
+            if int(i) == 1:
+                query = {
+                    'object-name': 'Test Object'
+                }
+                endpoint = '/networks/'+network_id+'/objects/test-object'
+                response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120 )
+                resp = json.loads( response.text )
+                if resp['object-code'] == 201:
+                    print('Create object test-object: ok')
+                else:
+                    print('Create object test-object: error')
+                    print( response.text )
+       
+                query = {
+                    'stream-name': 'Test Stream',
+                    'points-type': 'i' # 'i', 'f', or 's'
+                }
+                endpoint = '/networks/'+network_id+'/objects/test-object/streams/test-stream'
+                response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120 )
+                resp = json.loads( response.text )
+                if resp['stream-code'] == 201:
+                    print('Create stream test-stream: ok')
+                else:
+                    print('Create stream test-stream: error')
+                    print( response.text )
+    
+    
+                print("Start sending random points (Ctrl+C to stop)")
+                endpoint = '/networks/local/objects/test-object/streams/test-stream/points'
+    
+                    
+                query = {
+                    'points-value': int(x),
+                    'points-at': datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                }
+                response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120 )
+                resp = json.loads( response.text )
+                if resp['points-code'] == 200:
+                    print( 'Update test-stream points: ok')
+                else:
+                    print( 'Update test-stream points: error')
+                    print( response.text )
+            
+            ###################################################################################################
+
+            
         except:
             print "Error"
             
