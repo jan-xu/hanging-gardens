@@ -65,6 +65,7 @@ stream_tags = {
     -6: 'temperature'
 }
 
+'''
 actuator_tags = {
     'LED': 2,
     PP_tag = 3;
@@ -72,7 +73,7 @@ actuator_tags = {
     int Vupr_tag = 5;
     int Srv_tag = 6;
 }
-
+'''
 
 
 # Define setup function that runs once at the start
