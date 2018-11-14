@@ -100,7 +100,6 @@ def loop(t):
                 x = int(ser.readline())
                 print "Data point:", x
 
-                #if int(i) == 1:
                 query = {
                     'object-name': object_names[i]
                 }
@@ -143,6 +142,13 @@ def loop(t):
                     t = 2
                 else:
                     t = 1
+
+
+
+
+
+
+                ## UPLOAD INFO ABOUT ENERGY USAGE FOR LED
             except:
                 print "Error"
     time.sleep(0.1) # 100 ms delay
@@ -186,6 +192,12 @@ def main():
             if t != 0:
                 print act_sets
                 print ""
+
+            # RECORD WHEN LED IS ON
+            # READ TAGS FOR PUMP AND VALVES
+
+
+
             #if time.time() > nextLoop:
                 # If next loop time has passed
                 #nextLoop = time.time() + delay

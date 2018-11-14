@@ -134,6 +134,66 @@ def flushing(time_last_flush):
 
     return flush, time_last_flush
 
+def LED_energy_usage(LED_set):
+    base = 'http://127.0.0.1:5000'
+    header = {}
+
+    LED_kW = 0.06 # [kW] -- wattage of LED
+    timeInterval = 0.25 # [hrs] -- time interval between readings
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    if LED_set == 1:
+        LED_energy = LED_kW * timeInterval
+
+    query = {
+        'object-name': 'Energy consumption'
+    }
+    endpoint = '/networks/local/objects/energy'
+    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
+    resp = json.loads(response.text)
+    if resp['object-code'] == 201:
+        print 'Create object: ok'
+
+    query = {
+        'stream-name': 'LED',
+        'points-type': 'f' # 'i', 'f', or 's'
+    }
+
+    endpoint = '/networks/local/objects/energy/streams/LED'
+    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
+    resp = json.loads(response.text)
+    if resp['stream-code'] == 201:
+        print 'Create stream: ok'
+
+    endpoint = '/networks/local/objects/energy/streams/LED/points'
+    query = {
+        'points-value': LED_energy,
+        'points-at': now
+    }
+    response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] == 200:
+        print 'Update processed data points: ok'
+    else:
+        print 'Update processed data points: error'
+        print response.text
+
+    total_energy = 0
+
+    query = {
+        'points-end': now
+    }
+    endpoint = '/networks/local/objects/energy/streams/LED/points'
+    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] != 200:
+        print 'Error reading data'
+    for dict in resp['points']:
+        total_energy += dict['value']
+
+    print "Total energy consumption:", total_energy, "kWh"
+
+
 def main2(time_last_flush, t):
     max_exp = 300000
     if t == 2:
@@ -165,5 +225,7 @@ def main2(time_last_flush, t):
         'LED': LED_set,
         'flush': flush
     }
+
+    LED_energy_usage(LED_set)
 
     return settings, time_last_flush

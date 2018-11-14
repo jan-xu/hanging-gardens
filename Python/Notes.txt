@@ -1,0 +1,13 @@
+Notes:
+
+1. Move over processed data points to WebServer, don't upload them to the server
+   from DataAnalysis.py, this should be done in WebServer.py
+
+2. Ensure temperature is a float
+
+3. Get Arduino to send a tag when valves and pump are open/on to calculate
+   energy consumption
+
+4. Check how to visualize multiple graphs in the same page
+
+5. Add the 8AM reset function
