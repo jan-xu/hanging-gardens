@@ -9,7 +9,7 @@ DESCRIPTION
 
 */
 
-#include "Servo.h"
+#include <Servo.h>
 
 // Declare Pin ID's for all sensors
 int Llft = 0; // left light sensor on upper roof
@@ -28,6 +28,7 @@ int Srvlwr = 9 ; // lower servo motor
 int Srvupr = 10; // upper servo motor
 Servo SMlwr; // instantiate lower servo motor
 Servo SMupr; // instantiate upper servo motor
+int pos = 0; // servo position
 
 // Declare sensor tags
 int Llft_tag = -1; // left light sensor on upper roof
@@ -51,12 +52,12 @@ int Vlwr_set = 0; // valve on lower rack closed
 int Vupr_set = 0; // valve on upper rack closed
 
 // Declare some useful parameters
-int Srvlft = 1000; // servo fully anti-clockwise (left position)
-int Srvrgt = 2000; // servo fully clockwise (right position)
-int Srvctr = 1500; // servo midpoint (center position)
-int Srvlft_tag = -1000; // tag for servo fully anti-clockwise (left position)
-int Srvrgt_tag = -2000; // tag for servo fully clockwise (right position)
-int Srvctr_tag = -1500; // tag for servo midpoint (center position)
+// int Srvlft = 1000; // servo fully anti-clockwise (left position)
+// int Srvrgt = 2000; // servo fully clockwise (right position)
+// int Srvctr = 1500; // servo midpoint (center position)
+// int Srvlft_tag = -1000; // tag for servo fully anti-clockwise (left position)
+// int Srvrgt_tag = -2000; // tag for servo fully clockwise (right position)
+// int Srvctr_tag = -1500; // tag for servo midpoint (center position)
 // int flushMode = 0; // indicator of flushing mode (0: off, 1: on)
 int flushMode_tag = 9; // tag that toggles flushing mode
 double timeIntervalNormal = 900000; // [ms] -- 15 mins interval between each reading (normal operation)
@@ -92,9 +93,9 @@ void setup() {
 
   // Initialize servos
   SMlwr.attach(Srvlwr); // lower servo --> Pin 9
-  SMlwr.writeMicroseconds(Srvctr); // set lower servo to center position
+  // SMlwr.writeMicroseconds(Srvctr); // set lower servo to center position
   SMupr.attach(Srvupr); // upper servo --> Pin 10
-  SMupr.writeMicroseconds(Srvctr); // set upper servos to center position
+  // SMupr.writeMicroseconds(Srvctr); // set upper servos to center position
 }
 
 void sensorsNormalOperation() {
@@ -126,36 +127,88 @@ void sensorsNormalOperation() {
 
 }
 
-void roofactuators() {
+void roofactuators() { // manipulate servo motors and LED
   if (Serial.available() > 0) {
     if (Serial.read() == Srv_tag) {
-      if (Serial.read() == Srvlft_tag) {
-        SMlwr.writeMicroseconds(Srvlft); // set lower servo to left position
-        SMupr.writeMicroseconds(Srvlft); // set upper servo to left position
-        digitalWrite(LED, LOW);
-      } else if (Serial.read() == Srvrgt_tag) {
-        SMlwr.writeMicroseconds(Srvrgt); // set lower servo to right position
-        SMupr.writeMicroseconds(Srvrgt); // set upper servo to right position
-        digitalWrite(LED, LOW);
-      } else if (Serial.read() == Srvctr_tag) {
-        SMlwr.writeMicroseconds(Srvctr); // set lower servo to midpoint
-        SMupr.writeMicroseconds(Srvctr); // set upper servo to midpoint
+      
+      if (Serial.read() == Srvlft_tag) { // rotate roof to left
+        if (pos == 180) {
+          // already on left position, do nothing
+        }
+        else if (pos == -180) {
+          // rotate from right to left
+          for (pos = -180; pos <= 180; pos += 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          }
+        }
+        else if (pos == 0) {
+          // rotate from center to left
+          for (pos = 0; pos <= 180; pos += 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          }
+        }
+        
+      } else if (Serial.read() == Srvrgt_tag) { // rotate roof to right
+        if (pos == -180) {
+          // already on right position, do nothing
+        }
+        else if (pos == 180) {
+          // rotate from left to right
+          for (pos = 180; pos >= -180; pos -= 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          }
+        }
+        else if (pos == 0) {
+          // rotate from center to right
+          for (pos = 0; pos >= -180; pos -= 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          }
+        }
+        
+      } else if (Serial.read() == Srvctr_tag) { // rotate roof to center
+        if (pos == 0) {
+          // alreadt at center, do nothing
+        }
+        if (pos == 180) {
+          // rotate from left to center
+          for (pos = 180; pos >= 0; pos -= 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          } 
+        }
+        else if (pos == -180) {
+          // rotate from right to center
+          for (pos = -180; pos <= 0; pos += 1) {
+            SMlwr.write(pos);
+            SMupr.write(pos);
+            delay(15);
+          }
+        }
       }
     }
 
     if (Serial.read() == LED_tag) {
       LED_set = Serial.read();
-      
       if (LED_set == 1) {
-        digitalWrite(LED, HIGH);
-        SMlwr.writeMicroseconds(Srvctr); // set lower servo to midpoint
-        SMupr.writeMicroseconds(Srvctr); // set upper servo to midpoint
-      } else if (LED_set == 0) {
-        digitalWrite(LED, LOW);
+        digitalWrite(LED, LOW); // LOW to turn on LED on relay module
+      } 
+      else if (LED_set == 0) {
+        digitalWrite(LED, HIGH); // HIGH to turn off LED on relay module
       }
     }
   }
 }
+
+
 
 void flushactuators() {
   if (Serial.available() > 0) {
@@ -239,6 +292,8 @@ void flushing() {
 void loop() {
   sensorsNormalOperation(); // read all sensors every 15 mins
   delay(10000); // allow time for data processing
+
+  roofactuators();
 
   while (Serial.available() > 0) {
     roofactuators();
