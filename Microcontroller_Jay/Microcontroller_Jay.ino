@@ -20,15 +20,12 @@ int Wupr = 4; // water level (ultrasonic) meter on upper rack
 int Tupr = 5; // temperature meter on upper rack
 
 // Declare Pin ID's for all actuators and initialize servos
-int LED    = 2 ; // LED on both racks
-int PP     = 4 ; // water pump in tank
-int Vlwr   = 7 ; // valve on lower rack
-int Vupr   = 8 ; // valve on upper rack
-int Srvlwr = 9 ; // lower servo motor
-int Srvupr = 10; // upper servo motor
-Servo SMlwr; // instantiate lower servo motor
-Servo SMupr; // instantiate upper servo motor
-int pos = 0; // servo position
+//int LED    = 2 ; // LED on both racks
+//int PP     = 4 ; // water pump in tank
+//int Vlwr   = 7 ; // valve on lower rack
+//int Vupr   = 8 ; // valve on upper rack
+//int Srvlwr = 9 ; // lower servo motor
+//int Srvupr = 10; // upper servo motor
 
 // Declare sensor tags
 int Llft_tag = -1; // left light sensor on upper roof
@@ -59,7 +56,7 @@ int Vupr_set = 0; // valve on upper rack closed
 // int Srvrgt_tag = -2000; // tag for servo fully clockwise (right position)
 // int Srvctr_tag = -1500; // tag for servo midpoint (center position)
 // int flushMode = 0; // indicator of flushing mode (0: off, 1: on)
-int flushMode_tag = 9; // tag that toggles flushing mode
+// int flushMode_tag = 9; // tag that toggles flushing mode
 double timeIntervalNormal = 900000; // [ms] -- 15 mins interval between each reading (normal operation)
 int timeIntervalFlush = 1000; // [ms] -- 1 sec interval between each reading (for flushing)
 int waterLvlmax = 20; // [mm] -- 20 mm distance between ultrasonic meter and water level required to stop pumping
@@ -69,9 +66,31 @@ int flush_max_its = 300; // 300 seconds maximum of flushing
 
 
 
+/////////////// Jay's parameters
+/////////////// pin IDs
+int LED = 2;
+int PP = 3;
+int Vlwr   = 4 ; // valve on lower rack
+int Vupr   = 5 ; // valve on upper rack
+Servo SMlwr; // instantiate lower servo motor
+Servo SMupr; // instantiate upper servo motor
+int pos = 0; // servo position
+int Srvlwr1 = 6 ; // lower servo motor
+int Srvlwr2 = 7;
+int Srvupr1 = 8; // upper servo motor
+int Srvupr2 = 9;
 
+/////////////// Distance meter
+int trigLw = 12;    // trigger lower
+int echoLw = 13;    // echo lower
+int trigUp = 10;    // trigger upper
+int echoUp = 11;    // trigger lower
+long duration, cm;
+///////////////
 
-
+/////////////// actuator tags
+int flushMode_tag = 9;
+///////////////
 
 void setup() {
   // Initialize serial communication at 9600 bps
@@ -88,14 +107,47 @@ void setup() {
   // Initalize actuators as outputs
   pinMode(LED , OUTPUT); // LED on both racks
   pinMode(PP  , OUTPUT); // water pump in tank
-  pinMode(Vlwr, OUTPUT); // valve on lower rack
-  pinMode(Vupr, OUTPUT); // valve on upper rack
 
   // Initialize servos
   SMlwr.attach(Srvlwr); // lower servo --> Pin 9
   // SMlwr.writeMicroseconds(Srvctr); // set lower servo to center position
   SMupr.attach(Srvupr); // upper servo --> Pin 10
   // SMupr.writeMicroseconds(Srvctr); // set upper servos to center position
+
+  //////////////// Jay's setup
+  //////////////// distance meter
+  pinMode(trigLw, OUTPUT);
+  pinMode(echoLw, INPUT);
+  pinMode(trigUp, OUTPUT);
+  pinMode(echoUp, INPUT);
+
+  //////////////// flushing
+  pinMode(Vlwr, OUTPUT); // valve on lower rack
+  pinMode(Vupr, OUTPUT); // valve on upper rack
+}
+
+int waterLevelLw() {
+  digitalWrite(trigLw, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigLw, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigLw, LOW);
+  pinMode(echoLw, INPUT);
+  duration = pulseIn(echoLw, HIGH);
+  cm = (duration/2) / 29.1;     // Divide by 29.1 or multiply by 0.0343
+  return cm;
+}
+
+int waterLevelUp() {
+  digitalWrite(trigUp, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigUp, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigUp, LOW);
+  pinMode(echoUp, INPUT);
+  duration = pulseIn(echoUp, HIGH);
+  cm = (duration/2) / 29.1;     // Divide by 29.1 or multiply by 0.0343
+  return cm;
 }
 
 void sensorsNormalOperation() {
@@ -113,13 +165,15 @@ void sensorsNormalOperation() {
   Serial.println(Lctr_tag);
   Serial.println(analogRead(Lctr));
 
-  // Water level (ultrasonic) meter on lower rack
+  // Water level (ultrasonic) meter on lower rack         updated 11/14
+  cm = waterLevelLw();
   Serial.println(Wlwr_tag);
-  Serial.println(analogRead(Wlwr));
+  Serial.println(cm);  // for lower rack in cm
 
-  // Water level (ultrasonic) meter on upper rack
+  // Water level (ultrasonic) meter on upper rack         updated 11/14
+  cm = waterLevelUp();
   Serial.println(Wupr_tag);
-  Serial.println(analogRead(Wupr));
+  Serial.println(cm);  // for upper rack in cm
 
   // Temperature meter on upper rack
   Serial.println(Tupr_tag);
@@ -208,88 +262,69 @@ void roofactuators() { // manipulate servo motors and LED
   }
 }
 
-
-
-void flushactuators() {
-  if (Serial.available() > 0) {
-    if (Serial.read() == PP_tag) {
-      if (Serial.read() == 1) {
-        digitalWrite(PP, HIGH);
-      } else if (Serial.read() == 0) {
-        PP_set = LOW;
-      }
-    }
-
-    if (Serial.read() == Vlwr_tag) {
-      if (Serial.read() == 1) {
-        Vlwr_set = HIGH;
-      } else if (Serial.read() == 0) {
-        Vlwr_set = LOW;
-      }
-    }
-
-    if (Serial.read() == Vupr_tag) {
-      if (Serial.read() == 1) {
-        Vupr_set = HIGH;
-      } else if (Serial.read() == 0) {
-        Vupr_set = LOW;
-      }
-    }
-  }
+void initiator() { // run only once when start
+                    // need to figure out when to run this func
+  digitalWrite(Vupr, LOW); // open upper valve
+  do {
+    digitalWrite(PP, LOW); // turn on pump
+  } while (WaterLevelLw > 3); // wait until lower rack is filled with water
+  digitalWrite(Vupr, HIGH); // close upper valve to fill in upper rack with water
+  do {
+    digitalWrite(PP, LOW);
+  } while ((WaterlLevelLw < 3) && (WaterLevelUp > 3)); // wait until upper rack is filled
+  // assuming both racks are filled up with water
+  // stop pump
+  digitalWrite(PP, HIGH); 
 }
 
-void flushing() {
-  int i = 0;
-  digitalWrite(Vlwr, HIGH);
-  int waterLvllwr = analogRead(Wlwr); // add mapping if required
-  while (waterLvllwr < waterLvlempty) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvllwr = analogRead(Wlwr); // add mapping if required
-    if (i >= flush_max_its) {
-      break;
+void flushing() {                           // determine whether to flush or not
+  if (Serial.available() > 0) {
+    if (Serial.read() == flushMode_tag) {   // identify flushing order
+////////////////////////////////////////////////////////////
+      if (Serial.read() == 0) {           // if flushing is not ordered
+        digitalWrite(Vlwr, HIGH);         // make sure valves and pump
+        digitalWrite(Vupr, HIGH);         // are closed and not running
+        digitalWrite(PP, HIGH);
+      }
+////////////////////////////////////////////////////////////  
+      if (Serial.read() == 1) {             // if flushing is ordered
+        do {
+          digitalWrite(Vlwr, LOW);          // open lower valve
+        } while (WaterLevelLw < 10);        // keep lower valve open until lower water level is lower than 2cm
+        if (WaterLevelLw > 10) {             // if lower water level is lower than 3cm
+          do {
+            digitalWrite(Vupr, LOW);        // open upper valve
+                                  // keep upper valve open until upper water level is lower than 2cm
+                                  // while lower water level is lower than 2cm
+          } while ((WaterLevelUp < 10) && (WaterLevelLw > 10)); 
+        }
+        // we are done with emptying racks
+        // let the pump rinse the racks for 15 sec
+        if ((WaterLevelLw > 10) && (WaterLevelUp > 10)) {
+          // pumping is faster than flushing. maybe less than 15 sec
+          for (int ppRinse = 0; ppRinse < 16; ppRinse += 1) {
+            digitalWrite(PP, LOW); // run pump for 15 sec
+            delay(1000);
+          }
+        }
+        // now we need to fill up the racks with water
+        // pump is still running
+        // close lower valve first
+        do {
+          digitalWrite(Vlwr, HIGH);     // close lower valve
+        } while (WaterLevelLw > 3);     // wait until lower water level is higher than 10cm
+        do {
+          digitalWrite(Vupr, HIGH);     // close upper valve
+        } while ((WaterLevelLw < 3) && (WaterLevelUp > 3))  // wait until upper rack is filled with water
+        digitalWrite(PP, HIGH); // turn off pump assuming both racks are filled with water
+      }
     }
   }
-
-  i = 0;
-  digitalWrite(Vupr, HIGH);
-  int waterLvlupr = analogRead(Wupr); // add mapping if required
-  while (waterLvlupr < waterLvlempty) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvlupr = analogRead(Wupr); // add mapping if required
-    if (i >= flush_max_its) {
-      break;
-    }
-  }
-
-  i = 0;
-  digitalWrite(PP, HIGH);
-  digitalWrite(Vlwr, LOW);
-  while (waterLvllwr > waterLvlmax) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvllwr = analogRead(Wlwr); // add mapping if required
-    if (i >= flush_max_its) {
-      break;
-    }
-  }
-
-  i = 0;
-  digitalWrite(Vupr, LOW);
-  while (waterLvlupr > waterLvlmax) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvlupr = analogRead(Wupr); // add mapping if required
-    if (i >= flush_max_its) {
-      break;
-    }
-  }
-
-  digitalWrite(PP, LOW);
 }
 
 void loop() {
+  // set all actuators initially to be closed (LOW)
+  
   sensorsNormalOperation(); // read all sensors every 15 mins
   delay(10000); // allow time for data processing
 
