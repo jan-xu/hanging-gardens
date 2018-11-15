@@ -1,0 +1,8 @@
+Notes:
+
+3. Get Arduino to send a tag when valves and pump are open/on to calculate
+   energy consumption
+
+4. Check how to visualize multiple graphs in the same page
+
+6. Mapping of the sensors

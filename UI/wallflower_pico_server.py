@@ -213,7 +213,7 @@ def streams(object_id,stream_id):
     stream_request = {
         'stream-id': stream_id
     }
-    
+
     response = {
         'network-id': config['network-id'],
         'object-id': object_id,
@@ -462,4 +462,4 @@ if __name__ == '__main__':
         reactor.run()
     else:
         # Start the Flask app
-        app.run(host='0.0.0.0',port=config["http_port"])
+        app.run(host='127.0.0.1',port=config["http_port"])

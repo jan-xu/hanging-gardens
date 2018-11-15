@@ -67,7 +67,7 @@ custom_sidebar_link_callback = function( select ){
   } else if (select == 'exposure'){
     var plotCalls = 0;
     var plotTimer = setInterval( function(){
-      getPoints('local','light_sensor','daily_exposure', function(points){
+      getPoints('local','exposure','exposure', function(points){
         console.log( "The points request was successful!" );
         exposure_loadPlot( points );
       });
@@ -84,6 +84,20 @@ custom_sidebar_link_callback = function( select ){
       getPoints('local','thermometer','temperature', function(points){
         console.log( "The points request was successful!" );
         temperature_loadPlot( points );
+      });
+      if( plotCalls > 20 ){
+        console.log( 'Clear timer' );
+        clearInterval( plotTimer );
+      }else{
+        plotCalls += 1;
+      }
+    }, 1000);
+  } else if (select == 'energy'){
+    var plotCalls = 0;
+    var plotTimer = setInterval( function(){
+      getPoints('local','energy','total_energy', function(points){
+        console.log( "The points request was successful!" );
+        energy_loadPlot( points );
       });
       if( plotCalls > 20 ){
         console.log( 'Clear timer' );
@@ -177,6 +191,33 @@ function temperature_loadPlot( points ){
   }
 }
 
+function energy_loadPlot( points ){
+  var plot = $('#content-energy');
+  // Check if plot has a Highcharts element
+  if( plot.highcharts() === undefined ){
+    // Create a Highcharts element
+    plot.highcharts( energy_plot_options );
+  }
+
+  // Iterate over points to place in Highcharts format
+  var datapoints = [];
+  for ( var i = 0; i < points.length; i++){
+    var at_date = new Date(points[i].at);
+    var at = at_date.getTime() - at_date.getTimezoneOffset()*60*1000;
+    datapoints.unshift( [ at, points[i].value] );
+  }
+
+  // Update Highcharts plot
+  if( plot.highcharts().series.length > 0 ){
+    plot.highcharts().series[0].setData( datapoints );
+  }else{
+    plot.highcharts().addSeries({
+      name: "Total energy consumption [kWh]",
+      data: datapoints
+    });
+  }
+}
+
 var illuminance_plot_options = {
   chart: {
     type: 'line'
@@ -222,5 +263,21 @@ var temperature_plot_options = {
   },
   title: {
     text: 'Temperature [°C]'
+  },
+};
+
+var energy_plot_options = {
+  chart: {
+    type: 'line'
+  },
+  xAxis: {
+    type: 'datetime',
+    dateTimeLabelFormats: { // don't display the dummy year
+      month: '%e. %b',
+      year: '%b'
+    },
+  },
+  title: {
+    text: 'Total energy consumption [kWh]'
   },
 };
