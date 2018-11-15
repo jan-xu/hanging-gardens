@@ -16,8 +16,9 @@ import requests
 import json
 import datetime
 import pytz
+from tzlocal import get_localzone
 from DataAnalysis import analysis, time_reset
-from ServerRequests import create_object, create_stream, update_point, count_exposure
+from ServerRequests import create_object, create_stream, update_point, get_exposure
 
 # Change the port name to match the port to which Arduino is connected
 serial_port_name = '/dev/cu.usbmodem144401' # for Mac
@@ -70,7 +71,7 @@ points_type = { # 'i', 'f', or 's'
     -6:  'f',
 
     # Processed data
-    -7:  'i',
+    -7:  'f',
     -8:  'f',
     -9:  'f',
     -10: 'f',
@@ -105,10 +106,18 @@ stream_tags = {
 
     # Processed data
     -7:  'exposure',
-    -8:  'led_energy',
-    -9:  'pump_energy',
-    -10: 'valves_energy',
+    -8:  'led_power',
+    -9:  'pump_power',
+    -10: 'valve_power',
     -11: 'total_energy'
+}
+
+act_tags = {
+    'left_roof': 2,
+    'right_roof': 3,
+    'center_roof': 4,
+    'LED': 5,
+    'flush': 6
 }
 
 # Define setup function that runs once at the start
@@ -123,7 +132,7 @@ def setup():
             create_stream(stream_names[i], points_type[i], object_tags[i], stream_tags[i], base)
 
         # Initialize setup time
-        start_time = datetime.datetime.utcnow()
+        start_time = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
 
         # Initialize reset time for exposure
         exp_reset_time = time_reset(datetime.datetime.now())
@@ -132,7 +141,7 @@ def setup():
         exp_reset_time_today = time_reset(datetime.datetime.now() - datetime.timedelta(1))
 
         # Initialize exposure count
-        exposure = count_exposure(start_time, exp_reset_time_today, base, error=False)
+        exposure = get_exposure(exp_reset_time_today, base, error=False)
 
         return start_time, exp_reset_time, exposure
     except:
@@ -149,34 +158,37 @@ def loop(time_last_flush, exp_reset_time, exposure):
         exposure = 0
         exp_reset_time = time_reset(datetime.datetime.now())
 
-    t = 0
     # Check if something is in serial buffer
     if ser.inWaiting() > 0:
-        i = int(ser.readline())
-        if i < 0:
+        i = int(ser.readline()) # attributes i with the sensor data tag
+        if i < 0: # all tags are negative integers
             try:
-                print now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                # Read entire line for data point
+                x = int(ser.readline())
+
+                # Print info of the data point
+                print "Time:", now.astimezone(get_localzone()).strftime("%Y-%m-%d %H:%M:%S")
                 print "Object:", object_names[i]
                 print "Stream:", stream_names[i]
-
-                # Read entire line (until '\n')
-                x = int(ser.readline())
                 print "Data point:", x
+                print ""
 
+                # Update database with new data point
                 update_point(x, now, object_tags[i], stream_tags[i], base, success=False)
 
-                if i == -3:
-                    t = 2
-                    light = x
+                # Thermometer is last data point;
+                # all raw data points have been received.
+                # Proceed to determine actuation settings:
+                if i == -6:
+                    act_sets, time_last_flush, exposure = analysis(exposure, now, time_last_flush)
+                    print "Actuation settings:"
+                    print act_sets
+                    print ""
 
-                    #exposure =
-
-                else:
-                    t = 1
-                ## UPLOAD INFO ABOUT ENERGY USAGE FOR LED
-                act_sets, time_last_flush = analysis(time_last_flush, t)
-                print act_sets
-                print ""
+                    # Send actuation settings to Arduino
+                    for key in act_sets:
+                        ser.write(act_tags[key])
+                        ser.write(act_sets[key])
             except:
                 print "Error"
 
@@ -199,10 +211,6 @@ def main():
     while(True):
         try:
             time_last_flush, exp_reset_time, exposure = loop(time_last_flush, exp_reset_time, exposure)
-            # RECORD WHEN LED IS ON
-            # READ TAGS FOR PUMP AND VALVES
-
-
         except KeyboardInterrupt:
             break # if user enters "Ctrl + C", break while loop
         except:

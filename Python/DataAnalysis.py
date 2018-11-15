@@ -14,6 +14,11 @@ import requests
 import json
 import datetime
 import pytz
+from ServerRequests import update_power, update_exposure, get_illuminance, get_water_level, get_total_energy
+
+# Set up network details
+base = 'http://127.0.0.1:5000'
+interval = 0.25 # [hrs] -- time interval between sensor readings
 
 def time_reset(time):
     hour = 7
@@ -25,79 +30,20 @@ def time_reset(time):
         time_7AM = local_tz.localize(datetime.datetime(time.year, time.month, time.day, hour, 0, 0), is_dst=None).astimezone(tz=pytz.utc)
     return time_7AM
 
-def count_exposure(points_start):
-    base = 'http://127.0.0.1:5000'
-    header = {}
-
-    daily_exp = 0
-
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    query = {
-        'points-start': points_start,
-        'points-end': now
-    }
-    endpoint = '/networks/local/objects/light_sensor/streams/center_light/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    for dict in resp['points']:
-        daily_exp += dict['value']
-
-    print "Total daily light exposure:", daily_exp
-
-    query = {
-        'stream-name': 'Daily light exposure',
-        'points-type': 'i' # 'i', 'f', or 's'
-    }
-    endpoint = '/networks/local/objects/light_sensor/streams/daily_exposure'
-    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['stream-code'] == 201:
-        print 'Create stream: ok'
-
-    endpoint = '/networks/local/objects/light_sensor/streams/daily_exposure/points'
-    query = {
-        'points-value': daily_exp,
-        'points-at': datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    }
-    response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Update processed data points: error'
-        print response.text
-
-    return daily_exp
+def exposure_calc(exp, total):
+    new_total = total + exp * interval
+    return new_total
 
 def roof_config():
-    base = 'http://127.0.0.1:5000'
-    header = {}
+    threshold = 12500 # [lux] -- illuminance threshold for utilizing natural sunlight
 
-    light_thr = 12500
-
-    query = {
-        'points-limit': 1
-    }
-
-    # Left light sensor
-    endpoint = '/networks/local/objects/light_sensor/streams/left_light/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    left_exp = resp['points'][0]['value']
-
-    # Right light sensor
-    endpoint = '/networks/local/objects/light_sensor/streams/right_light/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    right_exp = resp['points'][0]['value']
+    # GET the most recent records of illuminances from left and right light sensors
+    left_ill = get_illuminance(base, 'left_light')
+    right_ill = get_illuminance(base, 'right_light')
 
     # Use logic to determine roof position [left, right]
-    left_roof = int(right_exp > left_exp and right_exp > light_thr)
-    right_roof = int(left_exp > right_exp and left_exp > light_thr)
+    left_roof = int(right_ill >= left_ill and right_ill >= threshold)
+    right_roof = int(left_ill > right_ill and left_ill >= threshold)
     if left_roof + right_roof == 0:
         center_roof = 1
     else:
@@ -105,34 +51,14 @@ def roof_config():
 
     return left_roof, right_roof, center_roof
 
-def flushing(time_last_flush):
-    base = 'http://127.0.0.1:5000'
-    header = {}
-
-    min_waterlvl = 50
-    flush_interval = datetime.timedelta(hours=24)
-    now = datetime.datetime.utcnow()
+def flushing(now, time_last_flush):
+    min_waterlvl = 50 # [mm] -- distance from water level meter to water surface
+    flush_interval = datetime.timedelta(1)
     delta = now - time_last_flush
 
-    query = {
-        'points-limit': 1
-    }
-
-    # Lower water level meter
-    endpoint = '/networks/local/objects/water_level_meter/streams/lower_water_level/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    lower_waterlvl = resp['points'][0]['value']
-
-    # upper water level meter
-    endpoint = '/networks/local/objects/water_level_meter/streams/upper_water_level/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    upper_waterlvl = resp['points'][0]['value']
+    # GET the most recent records of water levels from lower and upper water level meters
+    lower_waterlvl = get_water_level(base, 'lower_water_level')
+    upper_waterlvl = get_water_level(base, 'upper_water_level')
 
     # Use logic to determine if flushing is required
     if lower_waterlvl > min_waterlvl or upper_waterlvl > min_waterlvl or delta > flush_interval:
@@ -143,107 +69,33 @@ def flushing(time_last_flush):
 
     return flush, time_last_flush
 
-def LED_energy_usage(LED_set):
-    base = 'http://127.0.0.1:5000'
-    header = {}
-
-    timeInterval = 0.25 # [hrs] -- time interval between readings
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
+def power_consumption(now, LED_set):
     if LED_set == 1:
         LED_kW = 0.06 # [kW] -- wattage of LED
     else:
         LED_kW = 0
 
-    query = {
-        'object-name': 'Energy consumption'
-    }
-    endpoint = '/networks/local/objects/energy'
-    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['object-code'] == 201:
-        print 'Create object: ok'
+    # TO-DO: ADD IF PUMP AND VALVE IS OPEN
+    #        AND INCLUDE IN TOTAL POWER
 
+    update_power(LED_kW, now, 'led_power', base, success=False)
 
-    query = {
-        'stream-name': 'Total energy consumption',
-        'points-type': 'f' # 'i', 'f', or 's'
-    }
+    # Calculate total energy and update database
+    total_energy = get_total_energy(now, base, interval)
+    update_power(total_energy, now, 'total_energy', base, success=False)
 
-    endpoint = '/networks/local/objects/energy/streams/total'
-    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['stream-code'] == 201:
-        print 'Create stream: ok'
+def analysis(exposure, now, time_last_flush):
+    # Add to exposure count and update database
+    exposure = exposure_calc(get_illuminance(base, 'center_light'), exposure)
+    update_exposure(exposure, now, base, success=False)
 
-    query = {
-        'stream-name': 'LED',
-        'points-type': 'f' # 'i', 'f', or 's'
-    }
-
-    endpoint = '/networks/local/objects/energy/streams/LED'
-    response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['stream-code'] == 201:
-        print 'Create stream: ok'
-
-    endpoint = '/networks/local/objects/energy/streams/LED/points'
-    query = {
-        'points-value': LED_kW*1000,
-        'points-at': now
-    }
-    response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Update processed data points: error'
-        print response.text
-
-    total_energy = 0
-
-    query = {
-        'points-end': now
-    }
-    endpoint = '/networks/local/objects/energy/streams/LED/points'
-    response = requests.request('GET', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading data'
-    for dict in resp['points']:
-        total_energy += dict['value']*timeInterval
-
-    print "Total energy consumption:", total_energy, "kWh"
-
-    endpoint = '/networks/local/objects/energy/streams/total/points'
-    query = {
-        'points-value': total_energy,
-        'points-at': now
-    }
-    response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120)
-    resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Update energy data points: error'
-        print response.text
-
-
-
-def analysis(time_last_flush, t):
-    if t == 2:
-        max_exp = 300000
-        local_time = datetime.datetime.now()
-        time_7AM = time_reset(local_time).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        exposure = count_exposure(time_7AM)
-        if exposure >= max_exp:
-            LED_set = 0
-            left_roof = 0
-            right_roof = 0
-            center_roof = 1
-        else:
-            left_roof, right_roof, center_roof = roof_config()
-            if center_roof == 1:
-                LED_set = 1
-            else:
-                LED_set = 0
-        LED_energy_usage(LED_set)
+    # Check whether exposure is sufficient
+    req_exp = 300000 # [lux*hrs] -- minimum required exposure
+    if exposure >= req_exp:
+        LED_set = 0
+        left_roof = 0
+        right_roof = 0
+        center_roof = 1
     else:
         left_roof, right_roof, center_roof = roof_config()
         if center_roof == 1:
@@ -251,10 +103,14 @@ def analysis(time_last_flush, t):
         else:
             LED_set = 0
 
+    # Determine whether flushing is required
+    flush, time_last_flush = flushing(now, time_last_flush)
 
-    flush, time_last_flush = flushing(time_last_flush)
+    # Calculate power consumption
+    power_consumption(now, LED_set)
 
-    settings = {
+    # Collate actuation markers in dictionary
+    act_sets = {
         'left_roof': left_roof,
         'right_roof': right_roof,
         'center_roof': center_roof,
@@ -262,4 +118,4 @@ def analysis(time_last_flush, t):
         'flush': flush
     }
 
-    return settings, time_last_flush
+    return act_sets, time_last_flush, exposure

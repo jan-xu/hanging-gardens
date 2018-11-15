@@ -57,19 +57,101 @@ def update_point(x, time, obj_id, strm_id, base, success=True, error=False):
         print 'Error: data point not updated'
         print response.text
 
-def count_exposure(now, time_reset, base, error=False):
-    daily_exp = 0
-
+def update_exposure(exp, time, base, success=True, error=False):
     query = {
-        'points-start': time_reset.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-        'points-end': now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        'points-value': exp,
+        'points-at': time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     }
-    endpoint = '/networks/local/objects/light_sensor/streams/center_light/points'
+    endpoint = '/networks/local/objects/exposure/streams/exposure/points'
+    response = requests.request('POST', base + endpoint, params=query, headers={}, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] == 200 and success:
+        print 'Light exposure updated:', exp
+    elif resp['points-code'] != 200 and error:
+        print 'Error: light exposure not updated'
+        print response.text
+
+def update_power(x, time, strm_id, base, success=True, error=False):
+    query = {
+        'points-value': x,
+        'points-at': time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    }
+    endpoint = '/networks/local/objects/energy/streams/'+strm_id+'/points'
+    response = requests.request('POST', base + endpoint, params=query, headers={}, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] == 200 and success:
+        print 'Power consumption updated:', exp
+    elif resp['points-code'] != 200 and error:
+        print 'Error: power consumption not updated'
+        print response.text
+
+def get_illuminance(base, strm_id, error=False):
+    query = {
+        'points-limit': 1
+    }
+
+    endpoint = '/networks/local/objects/light_sensor/streams/'+strm_id+'/points'
     response = requests.request('GET', base + endpoint, params=query, headers={}, timeout=120)
     resp = json.loads(response.text)
-    if resp['points-code'] != 200:
-        print 'Error reading light data'
-    for dict in resp['points']:
-        daily_exp += dict['value']
+    if resp['points-code'] != 200 and error:
+        print 'Error reading illuminance data from left light sensor'
+    ill = resp['points'][0]['value']
 
-    print "Initial light exposure for plants today:", daily_exp, "lux*s"
+    return ill
+
+def get_water_level(base, strm_id, error=False):
+    query = {
+        'points-limit': 1
+    }
+
+    # Water level meter
+    endpoint = '/networks/local/objects/water_level_meter/streams/'+strm_id+'/points'
+    response = requests.request('GET', base + endpoint, params=query, headers={}, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] != 200 and error:
+        print 'Error reading water level data from lower rack'
+    waterlvl = resp['points'][0]['value']
+
+    return waterlvl
+
+def get_total_energy(now, base, interval, error=False):
+    total_energy = 0
+
+    # LED energy
+    query = {
+        'points-end': now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    }
+    endpoint = '/networks/local/objects/energy/streams/led_power/points'
+    response = requests.request('GET', base + endpoint, params=query, headers={}, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] != 200 and error:
+        print 'Error reading LED energy data'
+    for dict in resp['points']:
+        total_energy += dict['value']*interval
+
+    # Pump energy
+
+    # Valve energy
+
+    print "Total energy consumption since start:", total_energy, "kWh"
+    return total_energy
+
+def get_exposure(exp_reset_time_today, base, error=False):
+    exposure = 0
+
+    query = {
+        'points-start': exp_reset_time_today.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        'points-limit': 1
+    }
+    endpoint = '/networks/local/objects/exposure/streams/exposure/points'
+    response = requests.request('GET', base + endpoint, params=query, headers={}, timeout=120)
+    resp = json.loads(response.text)
+    if resp['points-code'] != 200 and error:
+        print 'Error reading exposure data'
+    if resp['points'] != []:
+        exposure = resp['points'][0]['value']
+
+    print "Initial light exposure for plants today:", exposure, "lux*hours"
+    print ""
+
+    return exposure

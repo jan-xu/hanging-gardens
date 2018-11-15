@@ -59,7 +59,7 @@ int Srvrgt_tag = -2000; // tag for servo fully clockwise (right position)
 int Srvctr_tag = -1500; // tag for servo midpoint (center position)
 // int flushMode = 0; // indicator of flushing mode (0: off, 1: on)
 int flushMode_tag = 9; // tag that toggles flushing mode
-double timeIntervalNormal = 900000; // [ms] -- 15 mins interval between each reading (normal operation)
+double timeIntervalNormal = 3000; // [ms] -- 5 mins interval between each reading (normal operation)
 int timeIntervalFlush = 1000; // [ms] -- 1 sec interval between each reading (for flushing)
 int waterLvlmax = 20; // [mm] -- 20 mm distance between ultrasonic meter and water level required to stop pumping
 int waterLvlmin = 50; // [mm] -- 50 mm distance between ultrasonic meter and water level required to initiate flushing
@@ -226,7 +226,7 @@ void flushing() {
 
 void loop() {
   sensorsNormalOperation(); // read all sensors every 15 mins
-  delay(10000); // allow time for data processing
+  delay(timeIntervalNormal); // allow time for data processing
 
   while (Serial.available() > 0) {
     roofactuators();
@@ -237,5 +237,5 @@ void loop() {
     }
   }
   
-  delay(5000);
+  delay(1000);
 }
