@@ -9,6 +9,14 @@ DESCRIPTION
 
 '''
 
+
+
+
+
+
+
+
+
 # Import required modules
 import requests
 import json
@@ -20,9 +28,9 @@ def time_reset(time):
     local_tz = pytz.timezone("America/Los_Angeles")
     delta = datetime.timedelta(1)
     if time.hour >= hour:
-        time_7AM = local_tz.localize(datetime.datetime(time.year, time.month, time.day, hour, 0, 0), is_dst=None).astimezone(tz=pytz.utc) + delta
-    else:
         time_7AM = local_tz.localize(datetime.datetime(time.year, time.month, time.day, hour, 0, 0), is_dst=None).astimezone(tz=pytz.utc)
+    else:
+        time_7AM = local_tz.localize(datetime.datetime(time.year, time.month, time.day, hour, 0, 0), is_dst=None).astimezone(tz=pytz.utc) - delta
     return time_7AM
 
 def count_exposure(points_start):

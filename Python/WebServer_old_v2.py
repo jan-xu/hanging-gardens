@@ -15,7 +15,8 @@ import time
 import requests
 import json
 import datetime
-from DataAnalysis import count_exposure, roof_config, flushing, main2
+import pytz
+from DataAnalysis import analysis
 
 # Change the port name to match the port to which Arduino is connected
 serial_port_name = '/dev/cu.usbmodem144401' # for Mac
@@ -81,18 +82,22 @@ def setup():
     try:
         print "Setup"
         print ""
+        start_time = datetime.datetime.utcnow()
+        return start_time
     except:
         print "Setup Error"
         print ""
 
 # Define setup function that runs continuously forever
-def loop(t):
-    t = 0 # Check if something is in serial buffer
+def loop(time_last_flush):
+    t = 0
+    # Check if something is in serial buffer
     if ser.inWaiting() > 0:
         i = int(ser.readline())
         if i < 0:
             try:
-                print datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                now = datetime.datetime.utcnow()
+                print now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 print "Object:", object_tags[i]
                 print "Stream:", stream_tags[i]
 
@@ -112,10 +117,16 @@ def loop(t):
                     #print 'Create object: error'
                     #print response.text
 
-                query = {
-                    'stream-name': stream_names[i],
-                    'points-type': 'i' # 'i', 'f', or 's'
-                }
+                if i == -6:
+                    query = {
+                        'stream-name': stream_names[i],
+                        'points-type': 'f' # 'i', 'f', or 's'
+                    }
+                else:
+                    query = {
+                        'stream-name': stream_names[i],
+                        'points-type': 'i' # 'i', 'f', or 's'
+                    }
                 endpoint = '/networks/'+network_id+'/objects/'+object_tags[i]+'/streams/'+stream_tags[i]
                 response = requests.request('PUT', base + endpoint, params=query, headers=header, timeout=120)
                 resp = json.loads(response.text)
@@ -128,7 +139,7 @@ def loop(t):
                 endpoint = '/networks/'+network_id+'/objects/'+object_tags[i]+'/streams/'+stream_tags[i]+'/points'
                 query = {
                     'points-value': x,
-                    'points-at': datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    'points-at': now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 }
                 response = requests.request('POST', base + endpoint, params=query, headers=header, timeout=120)
                 resp = json.loads(response.text)
@@ -140,19 +151,18 @@ def loop(t):
 
                 if i == -3:
                     t = 2
+                    light = x
                 else:
                     t = 1
-
-
-
-
-
-
                 ## UPLOAD INFO ABOUT ENERGY USAGE FOR LED
             except:
                 print "Error"
-    time.sleep(0.1) # 100 ms delay
-    return t
+    if t != 0:
+        act_sets, time_last_flush = analysis(time_last_flush, t)
+        print act_sets
+        print ""
+    time.sleep(1) # 1 s delay
+    return time_last_flush
 
 # Run continuously forever with a delay between calls
 def delayed_loop():
@@ -169,34 +179,16 @@ def close():
 
 
 
-
-
-
-
-
-
-
 # Program Structure
 def main():
     # Call setup function
-    setup()
-    # Set start time
-    time_last_flush = datetime.datetime.utcnow()
-    t = 0
-    #nextLoop = time.time()
+    start_time = setup()
+    time_last_flush = start_time
     while(True):
-        # Try loop() and delayed_loop()
         try:
-            t = loop(t)
-            act_sets, time_last_flush = main2(time_last_flush, t)
-            if t != 0:
-                print act_sets
-                print ""
-
+            time_last_flush = loop(time_last_flush)
             # RECORD WHEN LED IS ON
             # READ TAGS FOR PUMP AND VALVES
-
-
 
             #if time.time() > nextLoop:
                 # If next loop time has passed
