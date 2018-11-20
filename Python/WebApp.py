@@ -5,7 +5,7 @@ CE 186 Design of Cyber-Physical Systems (Fall Term 2018)
 Hanging Gardens: WebApp.py
 Group 6
 
-DESCRIPTION
+Web application
 
 '''
 
@@ -17,12 +17,14 @@ import json
 import datetime
 import pytz
 from tzlocal import get_localzone
-from DataAnalysis import analysis, time_reset
+from DataAnalysis import analysis, time_reset, illuminance_calc
 from ServerRequests import create_object, create_stream, update_point, get_exposure
 
 # Change the port name to match the port to which Arduino is connected
-serial_port_name = '/dev/cu.usbmodem144401' # for Mac
+#serial_port_name = '/dev/cu.usbmodem144401' # for Mac
+serial_port_name = '/dev/cu.usbserial-DN01J2G2' # for Mac
 ser = serial.Serial(serial_port_name, 9600, timeout=1)
+time.sleep(5)
 
 # Set up network details
 base = 'http://127.0.0.1:5000'
@@ -113,11 +115,15 @@ stream_tags = {
 }
 
 act_tags = {
-    'left_roof': 2,
-    'right_roof': 3,
-    'center_roof': 4,
-    'LED': 5,
-    'flush': 6
+    'roof': 'a',
+    'flush': 'b',
+    'LED': 'c'
+}
+
+act_state_tags = {
+    -101: 'vlwr',
+    -102: 'vupr',
+    -103: 'pump'
 }
 
 # Define setup function that runs once at the start
@@ -161,10 +167,13 @@ def loop(time_last_flush, exp_reset_time, exposure):
     # Check if something is in serial buffer
     if ser.inWaiting() > 0:
         i = int(ser.readline()) # attributes i with the sensor data tag
-        if i < 0: # all tags are negative integers
+        if i >= -100 and i < 0: # all sensor tags are negative integers between -100 (really -6) and -1
             try:
-                # Read entire line for data point
-                x = int(ser.readline())
+                # Read entire line for data point (subject to data type)
+                if points_type[i] == 'i':
+                    x = int(ser.readline())
+                elif points_type[i] == 'f':
+                    x = float(ser.readline())
 
                 # Print info of the data point
                 print "Time:", now.astimezone(get_localzone()).strftime("%Y-%m-%d %H:%M:%S")
@@ -172,6 +181,9 @@ def loop(time_last_flush, exp_reset_time, exposure):
                 print "Stream:", stream_names[i]
                 print "Data point:", x
                 print ""
+
+                if i == -1 or i == -2:
+                    x = illuminance_calc(x)
 
                 # Update database with new data point
                 update_point(x, now, object_tags[i], stream_tags[i], base, success=False)
@@ -188,11 +200,22 @@ def loop(time_last_flush, exp_reset_time, exposure):
                     # Send actuation settings to Arduino
                     for key in act_sets:
                         ser.write(act_tags[key])
-                        ser.write(act_sets[key])
+                        print act_tags[key]
+                        time.sleep(1)
+                        ser.write(str(act_sets[key]))
+                        print act_sets[key]
+                        time.sleep(1)
             except:
-                print "Error"
+                print "Error handling sensor data"
+        elif i < -100: # valve and pump tags are smaller than -100
+            try:
+                # Read entire line for actuator state
+                s = int(ser.readline())
 
-    time.sleep(1) # 1 s delay
+            except:
+                print "Error handling actuator data"
+
+    time.sleep(0.1) # 1 s delay
     return time_last_flush, exp_reset_time, exposure
 
 # Run once at the end

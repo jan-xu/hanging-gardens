@@ -9,233 +9,398 @@ DESCRIPTION
 
 */
 
-#include "Servo.h"
+#include <Servo.h>
+#include <Wire.h>
+#include "TSL2561.h"
+TSL2561 tsl(TSL2561_ADDR_FLOAT); 
 
-// Declare Pin ID's for all sensors
-int Llft = 0; // left light sensor on upper roof
-int Lrgt = 1; // right light sensor on upper roof
-int Lctr = 2; // center light sensor on upper rack
-int Wlwr = 3; // water level (ultrasonic) meter on lower rack
-int Wupr = 4; // water level (ultrasonic) meter on upper rack
-int Tupr = 5; // temperature meter on upper rack
+/////////////// tags
+int LightLeft_tag    = -1; // int in mV
+int LightRight_tag   = -2; // int in mV
+int LightCenter_tag  = -3; // int in lux
+int WaterLevelLw_tag = -4; // int in mm
+int WaterLevelUp_tag = -5; // int in mm
+int Temperature_tag  = -6; // data float
 
-// Declare Pin ID's for all actuators and initialize servos
-int LED    = 2 ; // LED on both racks
-int PP     = 4 ; // water pump in tank
-int Vlwr   = 7 ; // valve on lower rack
-int Vupr   = 8 ; // valve on upper rack
-int Srvlwr = 9 ; // lower servo motor
-int Srvupr = 10; // upper servo motor
-Servo SMlwr; // instantiate lower servo motor
-Servo SMupr; // instantiate upper servo motor
+/////////////// Jay's parameters
+/////////////// pin IDs
+// analog
+int Temp       = 0; // temperature sensor --> Analog Pin A0
+int LightLeft  = 1; // right photocell    --> Analog Pin A1
+int LightRight = 2; // left photocell     --> Analog Pin A2
 
-// Declare sensor tags
-int Llft_tag = -1; // left light sensor on upper roof
-int Lrgt_tag = -2; // right light sensor on upper roof
-int Lctr_tag = -3; // center light sensor on upper rack
-int Wlwr_tag = -4; // water level (ultrasonic) meter on lower rack
-int Wupr_tag = -5; // water level (ultrasonic) meter on upper rack
-int Tupr_tag = -6; // temperature meter on upper rack
+// digital
+int LED     = 2; // LED on both racks   --> Digital Pin 2
+int PP      = 3; // water pump          --> Digital Pin 3
+int Vlwr    = 4; // valve on lower rack --> Digital Pin 4
+int Vupr    = 5; // valve on upper rack --> Digital Pin 5
+int Srvlwr1 = 6; // lower servo motor 1 --> Digital Pin 6
+int Srvlwr2 = 7; // lower servo motor 2 --> Digital Pin 7
+int Srvupr1 = 8; // upper servo motor 1 --> Digital Pin 8
+int Srvupr2 = 9; // upper servo motor 2 --> Digital Pin 9
 
-// Declare actuator tags
-int LED_tag = 2;
-int PP_tag = 3;
-int Vlwr_tag = 4;
-int Vupr_tag = 5;
-int Srv_tag = 6;
+Servo SMlwr1; // instantiate lower servo motor 1
+Servo SMlwr2; // instantiate lower servo motor 2
+Servo SMupr1; // instantiate upper servo motor 1
+Servo SMupr2; // instantiate upper servo motor 2
+int pos = 90; // servo position
 
-// Initialize actuator settings;
-int LED_set  = 0; // LED on both racks off
-int PP_set   = 0; // water pump in tank off
-int Vlwr_set = 0; // valve on lower rack closed
-int Vupr_set = 0; // valve on upper rack closed
+/////////////// Distance meter
+int trigLw = 12; // lower trigger
+int echoLw = 13; // lower echo
+int trigUp = 10; // upper trigger
+int echoUp = 11; // upper echo
+long duration, mm;
+float tempC;
+///////////////
 
-// Declare some useful parameters
-int Srvlft = 1000; // servo fully anti-clockwise (left position)
-int Srvrgt = 2000; // servo fully clockwise (right position)
-int Srvctr = 1500; // servo midpoint (center position)
-int Srvlft_tag = -1000; // tag for servo fully anti-clockwise (left position)
-int Srvrgt_tag = -2000; // tag for servo fully clockwise (right position)
-int Srvctr_tag = -1500; // tag for servo midpoint (center position)
-// int flushMode = 0; // indicator of flushing mode (0: off, 1: on)
-int flushMode_tag = 9; // tag that toggles flushing mode
-double timeIntervalNormal = 3000; // [ms] -- 5 mins interval between each reading (normal operation)
-int timeIntervalFlush = 1000; // [ms] -- 1 sec interval between each reading (for flushing)
-int waterLvlmax = 20; // [mm] -- 20 mm distance between ultrasonic meter and water level required to stop pumping
-int waterLvlmin = 50; // [mm] -- 50 mm distance between ultrasonic meter and water level required to initiate flushing
-int waterLvlempty = 120; // [mm] -- 120 mm distance between ultrasonic meter and water level of an empty tube
-int flush_max_its = 300; // 300 seconds maximum of flushing
+/////////////// Actuator tags
+int tag = 0;
+char act_tag   = '0';
+char Roof_tag  = 'a';
+char flush_tag = 'b';
+char LED_tag   = 'c';
+int RoofLeft   = 1;
+int RoofRight  = 2;
+int RoofCenter = 3;
+int flushOn    = 1;
+int flushOff   = 0;
+int LEDon      = 1;
+int LEDoff     = 0;
+///////////////
 
+/////////////// Valves and pump tags
+int Vlwr_tag = -101;
+int Vupr_tag = -102;
+int PP_tag   = -103;
+///////////////
 
-
-
-
-
+/////////////// Actuator settings
+int Roof_pos = 3;
+int flushMode = 0;
+int LED_set = 0;
 
 void setup() {
   // Initialize serial communication at 9600 bps
   Serial.begin(9600);
 
-  // Initialize sensors as inputs
-  pinMode(Llft, INPUT); // left light sensor on upper roof
-  pinMode(Lrgt, INPUT); // right light sensor on upper roof
-  pinMode(Lctr, INPUT); // center light sensor on upper rack
-  pinMode(Wlwr, INPUT); // water level (ultrasonic) meter on lower rack
-  pinMode(Wupr, INPUT); // water level (ultrasonic) meter on upper rack
-  pinMode(Tupr, INPUT); // temperature meter on upper rack
-
+  tsl.setGain(TSL2561_GAIN_0X); // set no gain for light sensor in center
+  
   // Initalize actuators as outputs
-  pinMode(LED , OUTPUT); // LED on both racks
-  pinMode(PP  , OUTPUT); // water pump in tank
+  pinMode(LED, OUTPUT); // LED on both racks
+  pinMode(PP , OUTPUT); // water pump in tank
+
+  // Initialize servos
+  SMlwr1.attach(Srvlwr1); // lower servo --> Pin 6
+  SMlwr2.attach(Srvlwr2); // lower servo --> Pin 7
+  SMupr1.attach(Srvupr1); // upper servo --> Pin 8
+  SMupr2.attach(Srvupr2); // upper servo --> Pin 9
+
+  //////////////// Distance meter
+  pinMode(trigLw, OUTPUT); // lower trigger --> Pin 12
+  pinMode(echoLw, INPUT);  // lower echo    --> Pin 13
+  pinMode(trigUp, OUTPUT); // upper trigger --> Pin 10
+  pinMode(echoUp, INPUT);  // upper echo    --> Pin 11
+
+  //////////////// Flushing
   pinMode(Vlwr, OUTPUT); // valve on lower rack
   pinMode(Vupr, OUTPUT); // valve on upper rack
 
-  // Initialize servos
-  SMlwr.attach(Srvlwr); // lower servo --> Pin 9
-  SMlwr.writeMicroseconds(Srvctr); // set lower servo to center position
-  SMupr.attach(Srvupr); // upper servo --> Pin 10
-  SMupr.writeMicroseconds(Srvctr); // set upper servos to center position
+  // Initialize all actuators
+  initiator();
+}
+
+// photocell on left roof
+int photocellLeft() {
+  int Vout = map(analogRead(LightLeft), 0, 1023, 0, 5000);
+  return Vout;
+}
+
+// photocell on right roof
+int photocellRight() {
+  int Vout = map(analogRead(LightRight), 0, 1023, 0, 5000);
+  return Vout;
+}
+
+// light sensor in center
+uint16_t light_sensor() {
+  uint32_t lum = tsl.getFullLuminosity();
+  uint16_t ir, full;
+  ir = lum >> 16;
+  full = lum & 0xFFFF;
+  uint16_t lux = tsl.calculateLux(full, ir);
+  return lux;
+}
+
+
+// lower water level
+int waterLevelLw() {
+  digitalWrite(trigLw, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigLw, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigLw, LOW);
+  duration = pulseIn(echoLw, HIGH);
+  mm = (duration/2) / 2.91; // Divide by 2.91 or multiply by 0.343
+  return mm;
+}
+
+// upper water level
+int waterLevelUp() {
+  digitalWrite(trigUp, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigUp, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigUp, LOW);
+  duration = pulseIn(echoUp, HIGH);
+  mm = (duration/2) / 29.1; // Divide by 2.91 or multiply by 0.343
+  return mm;
+}
+
+// temperature
+float temperature() {
+  int reading = analogRead(Temp);
+  float voltage = reading * 5.0;
+  voltage /= 1024.0;
+  float temperatureC = (voltage - 0.5) * 100;
+  return temperatureC;
 }
 
 void sensorsNormalOperation() {
   // Print tags followed by data reading of all sensors
 
   // Left light sensor on upper roof
-  Serial.println(Llft_tag);
-  Serial.println(analogRead(Llft));
+  int Vout = photocellLeft();
+  Serial.println(LightLeft_tag);
+  Serial.println(Vout);
 
   // Right light sensor on upper roof
-  Serial.println(Lrgt_tag);
-  Serial.println(analogRead(Lrgt));
+  Vout = photocellRight();
+  Serial.println(LightRight_tag);
+  Serial.println(Vout);
 
   // Center light sensor on upper roof
-  Serial.println(Lctr_tag);
-  Serial.println(analogRead(Lctr));
+  uint16_t lux = light_sensor();
+  Serial.println(LightCenter_tag);
+  Serial.println(lux);
 
   // Water level (ultrasonic) meter on lower rack
-  Serial.println(Wlwr_tag);
-  Serial.println(analogRead(Wlwr));
+  int mm = waterLevelLw();
+  Serial.println(WaterLevelLw_tag);
+  Serial.println(mm); // for lower rack in mm
 
   // Water level (ultrasonic) meter on upper rack
-  Serial.println(Wupr_tag);
-  Serial.println(analogRead(Wupr));
-
+  mm = waterLevelUp();
+  Serial.println(WaterLevelUp_tag);
+  Serial.println(mm); // for upper rack in cm
+  
   // Temperature meter on upper rack
-  Serial.println(Tupr_tag);
-  Serial.println(analogRead(Tupr));
+  float tempC = temperature();
+  Serial.println(Temperature_tag);
+  Serial.println(tempC);
 
 }
 
-void roofactuators() {
-  if (Serial.available() > 0) {
-    if (Serial.read() == Srv_tag) {
-      if (Serial.read() == Srvlft_tag) {
-        SMlwr.writeMicroseconds(Srvlft); // set lower servo to left position
-        SMupr.writeMicroseconds(Srvlft); // set upper servo to left position
-        digitalWrite(LED, LOW);
-      } else if (Serial.read() == Srvrgt_tag) {
-        SMlwr.writeMicroseconds(Srvrgt); // set lower servo to right position
-        SMupr.writeMicroseconds(Srvrgt); // set upper servo to right position
-        digitalWrite(LED, LOW);
-      } else if (Serial.read() == Srvctr_tag) {
-        SMlwr.writeMicroseconds(Srvctr); // set lower servo to midpoint
-        SMupr.writeMicroseconds(Srvctr); // set upper servo to midpoint
+// LED
+void LED_setting(int LED_set) {
+  if (LED_set == 1) {
+    digitalWrite(LED, LOW);
+  } else {
+    digitalWrite(LED, HIGH);
+  }
+}
+
+// roof done
+void roofactuators(int Roof_pos) { // manipulate servo motors and LED 
+  if (Roof_pos == RoofLeft) { // rotate roof to left
+    if (pos == 180) {               // to 180
+      // already on left position, do nothing
+    }
+    else if (pos == 0) {
+      // rotate from right to left
+      for (pos = 0; pos <= 180; pos += 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
       }
     }
-
-    if (Serial.read() == LED_tag) {
-      LED_set = Serial.read();
-      
-      if (LED_set == 1) {
-        digitalWrite(LED, HIGH);
-        SMlwr.writeMicroseconds(Srvctr); // set lower servo to midpoint
-        SMupr.writeMicroseconds(Srvctr); // set upper servo to midpoint
-      } else if (LED_set == 0) {
-        digitalWrite(LED, LOW);
+    else if (pos == 90) {
+      // rotate from center to left
+      for (pos = 90; pos <= 180; pos += 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
+      }
+    }
+    
+  } else if (Roof_pos == RoofRight) { // rotate roof to right
+    if (pos == 0) {                      // to 0 degrees angle
+      // already on right position, do nothing
+    }
+    else if (pos == 180) {
+      // rotate from left to right
+      for (pos = 180; pos >= 0; pos -= 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
+      }
+    }
+    else if (pos == 90) {
+      // rotate from center to right
+      for (pos = 90; pos >= 0; pos -= 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
+      }
+    }
+    
+  } else if (Roof_pos == RoofCenter) { // rotate roof to center
+    if (pos == 90) {                        // to 90 degrees
+      // already at center, do nothing
+    }
+    if (pos == 180) {
+      // rotate from left to center
+      for (pos = 180; pos >= 90; pos -= 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
+      } 
+    }
+    else if (pos == 0) {
+      // rotate from right to center
+      for (pos = 0; pos <= 90; pos += 1) {
+        SMlwr1.write(pos);
+        SMlwr2.write(pos);
+        SMupr1.write(pos);
+        SMupr2.write(pos);
+        delay(50);
       }
     }
   }
 }
 
-void flushactuators() {
-  if (Serial.available() > 0) {
-    if (Serial.read() == PP_tag) {
-      if (Serial.read() == 1) {
-        digitalWrite(PP, HIGH);
-      } else if (Serial.read() == 0) {
-        PP_set = LOW;
-      }
-    }
+//flushing
+void flushing(int flushMode) { // determine whether to flush or not
 
-    if (Serial.read() == Vlwr_tag) {
-      if (Serial.read() == 1) {
-        Vlwr_set = HIGH;
-      } else if (Serial.read() == 0) {
-        Vlwr_set = LOW;
-      }
+  if (flushMode == flushOff) { // if flushing is not ordered
+    digitalWrite(Vlwr, HIGH);  // make sure valves and pump
+    digitalWrite(Vupr, HIGH);  // are closed and not running
+    digitalWrite(PP, HIGH);
+  }
+  
+  if (flushMode == flushOn) {             // if flushing is ordered
+    Serial.println(Vlwr_tag); // send tag of lower valve
+    Serial.println(1);        // send tag that lower valve is open
+    do {
+      digitalWrite(Vlwr, LOW);  // open lower valve
+    } while (waterLevelLw() < 60); // keep lower valve open until lower water level is lower than 60mm
+    
+    Serial.println(Vupr_tag); // send tag of upper valve
+    Serial.println(1);        // send tag that upper valve is open
+    do {
+      digitalWrite(Vupr, LOW);  // open upper valve
+    } while (waterLevelUp() < 60); // keep upper valve open until upper water level is lower than 60mm
+    
+    // we are done with emptying racks
+    // let the pump rinse the racks for 10 sec
+    Serial.println(PP_tag); // send tag of pump
+    Serial.println(1);      // send tag that pump is on
+    for (int ppRinse = 0; ppRinse < 10; ppRinse += 1) {
+      digitalWrite(PP, LOW); // run pump for 15 sec
+      delay(1000);
     }
+    
+    // now we need to fill up the racks with water
+    // pump is still running
+    // close lower valve first
+    Serial.println(Vlwr_tag); // send tag of lower valve
+    Serial.println(0);        // send tag that lower valve is closed
+    do {
+      digitalWrite(Vlwr, HIGH); // close lower valve
+    } while (waterLevelLw() > 20); // wait until lower water level is higher than 20mm
 
-    if (Serial.read() == Vupr_tag) {
-      if (Serial.read() == 1) {
-        Vupr_set = HIGH;
-      } else if (Serial.read() == 0) {
-        Vupr_set = LOW;
-      }
-    }
+    Serial.println(Vupr_tag); // send tag of upper valve
+    Serial.println(0);        // send tag that upper valve is closed
+    do {
+      digitalWrite(Vupr, HIGH);  // close upper valve
+    } while (waterLevelUp() > 20); // wait until upper rack is filled with water
+
+    Serial.println(PP_tag); // send tag of pump
+    Serial.println(0);      // send tag that pump is off
+    digitalWrite(PP, HIGH); // turn off pump assuming both racks are filled with water
   }
 }
 
-void flushing() {
-  int i = 0;
+void initiator() { // run only once when start
+/////////////////////////// roof ready
+  //SMlwr1.write(pos);
+  //SMlwr2.write(pos);
+  //SMupr1.write(pos);
+  //SMupr2.write(pos);
+
+/////////////////////////// LED ready
+  digitalWrite(LED, HIGH);
+
+/////////////////////////// valves ready
   digitalWrite(Vlwr, HIGH);
-  int waterLvllwr = analogRead(Wlwr); // add mapping if required
-  while (waterLvllwr < waterLvlempty & i >= flush_max_its) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvllwr = analogRead(Wlwr); // add mapping if required
-  }
-
-  i = 0;
   digitalWrite(Vupr, HIGH);
-  int waterLvlupr = analogRead(Wupr); // add mapping if required
-  while (waterLvlupr < waterLvlempty & i >= flush_max_its) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvlupr = analogRead(Wupr); // add mapping if required
-  }
 
-  i = 0;
+/////////////////////////// pump ready
   digitalWrite(PP, HIGH);
-  digitalWrite(Vlwr, LOW);
-  while (waterLvllwr > waterLvlmax & i >= flush_max_its) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvllwr = analogRead(Wlwr); // add mapping if required
-  }
 
-  i = 0;
-  digitalWrite(Vupr, LOW);
-  while (waterLvlupr > waterLvlmax & i >= flush_max_its) {
-    ++i; // increment i by 1
-    delay(timeIntervalFlush);
-    waterLvlupr = analogRead(Wupr); // add mapping if required
-  }
-
-  digitalWrite(PP, LOW);
+/////////////////////////// water ready
+  digitalWrite(Vupr, LOW); // open upper valve
+  do {
+    digitalWrite(PP, LOW); // turn on pump
+  } while (waterLevelLw() > 20); // wait until lower rack is filled with water
+  digitalWrite(Vupr, HIGH); // close upper valve to fill in upper rack with water
+  do {
+    digitalWrite(PP, LOW);
+  } while (waterLevelUp() > 20); // wait until upper rack is filled
+  // assuming both racks are filled up with water
+  // stop pump
+  digitalWrite(PP, HIGH); 
 }
 
 void loop() {
-  sensorsNormalOperation(); // read all sensors every 15 mins
-  delay(timeIntervalNormal); // allow time for data processing
 
-  while (Serial.available() > 0) {
-    roofactuators();
-    delay(1000); // allow time for data to be sent to Serial monitor
-    
-    if (Serial.read() == flushMode_tag) {
-      flushing();
-    }
-  }
+  sensorsNormalOperation(); // read all sensors every 15 mins
+  delay(10000); // allow time for data processing
+
+  while (!Serial.available()) {}
   
-  delay(1000);
+  // Wait for actuator settings from Python (might have to copy and paste this three times instead)
+  while (Serial.available() > 0) {
+    act_tag = Serial.read();
+    Serial.println(act_tag);
+    delay(1000);
+    if (act_tag == Roof_tag) {
+      Roof_pos = int(Serial.read()) - 48; // subtract 48 to convert '0' (ASCII 48) to 0 and '1' (ASCII 49) to 1
+      Serial.println(Roof_pos);
+    } else if (act_tag == flush_tag) {
+      flushMode = int(Serial.read()) - 48;
+      Serial.println(flushMode);
+    } else if (act_tag == LED_tag) {
+      LED_set = int(Serial.read()) - 48;
+      Serial.println(LED_set);
+    }
+    delay(3000);
+  }
+
+  // Send actuator signals  
+  //roofactuators(Roof_pos);
+  LED_setting(LED_set);
+  //flushing(flushMode);
+
+  delay(3000);
 }

@@ -34,6 +34,13 @@ def exposure_calc(exp, total):
     new_total = total + exp * interval
     return new_total
 
+def illuminance_calc(v_out):
+    v_in = 5000 # [mV] -- input voltage
+    res_ext = 330 # [ohm] -- external resistance of photoresistor
+    res_pht = res_ext * (v_in/v_out - 1) # [ohm] -- resistance of photoresistor
+    ill = res_pht**(-1.7) * 10**9 # empirical formula between illuminance and resistance of photoresistor
+    return ill
+
 def roof_config():
     threshold = 12500 # [lux] -- illuminance threshold for utilizing natural sunlight
 
@@ -41,18 +48,18 @@ def roof_config():
     left_ill = get_illuminance(base, 'left_light')
     right_ill = get_illuminance(base, 'right_light')
 
-    # Use logic to determine roof position [left, right]
-    left_roof = int(right_ill >= left_ill and right_ill >= threshold)
-    right_roof = int(left_ill > right_ill and left_ill >= threshold)
-    if left_roof + right_roof == 0:
-        center_roof = 1
-    else:
-        center_roof = 0
+    # Use logic to determine roof position {left: 1, right: 2, center: 3}
+    if right_ill >= left_ill and right_ill >= threshold: # if light is strongest and strong enough from right
+        roof = 1 # set roof to left position
+    elif left_ill > right_ill and left_ill >= threshold: # if light is strongest and strong enough from left
+        roof = 2 # set roof to right position
+    else: # otherwise
+        roof = 3 # set roof to right position
 
-    return left_roof, right_roof, center_roof
+    return roof
 
 def flushing(now, time_last_flush):
-    min_waterlvl = 50 # [mm] -- distance from water level meter to water surface
+    min_waterlvl = 40 # [mm] -- distance from water level meter to water surface
     flush_interval = datetime.timedelta(1)
     delta = now - time_last_flush
 
@@ -91,14 +98,12 @@ def analysis(exposure, now, time_last_flush):
 
     # Check whether exposure is sufficient
     req_exp = 300000 # [lux*hrs] -- minimum required exposure
-    if exposure >= req_exp:
-        LED_set = 0
-        left_roof = 0
-        right_roof = 0
-        center_roof = 1
-    else:
-        left_roof, right_roof, center_roof = roof_config()
-        if center_roof == 1:
+    if exposure >= req_exp: # if plants have had enough light for the day
+        LED_set = 0 # turn LED off
+        roof = 3 # move roof to center
+    else: # if plants need more light
+        roof = roof_config()
+        if roof == 3:
             LED_set = 1
         else:
             LED_set = 0
@@ -111,11 +116,9 @@ def analysis(exposure, now, time_last_flush):
 
     # Collate actuation markers in dictionary
     act_sets = {
-        'left_roof': left_roof,
-        'right_roof': right_roof,
-        'center_roof': center_roof,
-        'LED': LED_set,
-        'flush': flush
+        'roof': roof,
+        'flush': flush,
+        'LED': LED_set
     }
 
     return act_sets, time_last_flush, exposure

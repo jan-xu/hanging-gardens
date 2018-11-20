@@ -5,4 +5,6 @@ Notes:
 
 4. Check how to visualize multiple graphs in the same page
 
-6. Mapping of the sensors
+6. Mapping of the sensors - only light left
+
+7. Figure out thresholds: water is sorted, temperature is not, light is not
