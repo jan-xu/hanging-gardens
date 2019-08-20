@@ -1,4 +1,4 @@
-Notes:
+To-Do:
 
 3. Get Arduino to send a tag when valves and pump are open/on to calculate
    energy consumption
