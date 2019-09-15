@@ -1,5 +1,7 @@
 # Hanging Gardens
 
+<img align="right" src="https://raw.githubusercontent.com/jan-xu/hanging-gardens/master/png/hanginggardens.png">
+
 Repository for CE186 project: Babylon - Hanging Gardens
 
 **Hanging Gardens** is a design project that seeks to design, prototype and test a smart indoors hydroponics system. This was done for the *CE 186 Design of Cyber-Physical Systems* at University of California, Berkeley in Fall Term 2018, supervised by Professor Scott Moura. The project focuses on the following topics:
@@ -9,8 +11,6 @@ Repository for CE186 project: Babylon - Hanging Gardens
 3. The aim of outperforming other hydroponic systems using our intended system by optimizing its energy requirements and simple operation, given its upscaling.
 
 For more contextual information, refer to the ```Final Report.pdf``` located in the *Report* folder.
-
-![alt text](https://raw.githubusercontent.com/jan-xu/hanging-gardens/master/png/hanginggardens.png "Final design")
 
 ### Contents
 This repository includes the .py-files of the employed system architecture and the source code for the microcontroller (Arduino). A brief technical description of the constituents of the program is followed below:
