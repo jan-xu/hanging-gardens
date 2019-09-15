@@ -10,6 +10,8 @@ Repository for CE186 project: Babylon - Hanging Gardens
 
 For more contextual information, refer to the ```Final Report.pdf``` located in the *Report* folder.
 
+![alt text](https://raw.githubusercontent.com/jan-xu/hanging-gardens/master/png/hanginggardens.png "Final design")
+
 ### Contents
 This repository includes the .py-files of the employed system architecture and the source code for the microcontroller (Arduino). A brief technical description of the constituents of the program is followed below:
 
@@ -22,3 +24,7 @@ This repository includes the .py-files of the employed system architecture and t
 ```Python/wallflower_pico_server.py```: Web server hosted by the microframework Flask. It sets up a local web interface through the usage of supplementary HTML code, supported by CSS and JavaScript code rendering the web visualization dynamic and user-friendly. It also handles the data storage in an SQLite database, where both raw and processed data is collected.
 
 ```Python/DataAnalysis.py```: A Python module that contains functions for data processing and interpretation of raw data into actuator settings. It is served by the ServerRequests module and called on by the web application.
+
+A diagram of how every module is related to one another is seen below.
+
+![alt text](https://raw.githubusercontent.com/jan-xu/hanging-gardens/master/png/connectivitydiagram.png "System Architecture")
